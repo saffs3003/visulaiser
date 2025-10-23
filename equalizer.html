@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      .container {
+        height: 500px;
+        width: 500px;
+        border: 1px solid black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        padding: 20px;
+
+        background-color: aqua;
+      }
+      canvas {
+        /* width: 100%;
+        height: 100%; */
+        /* position: absolute; */
+        top: 0;
+        left: 0;
+        z-index: 1;
+      }
+
+      .albumCover {
+        width: 50%;
+        height: 50%;
+        border-radius: 50%;
+        transform: translate(50%, 50%);
+      }
+      .albumCover img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: contain;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="cd" id="cd"></div>
+
+      <canvas id="canvas1"></canvas>
+    </div>
+    <audio controls autoplay id="audio" src="interstellar.mp3"></audio>
+
+    <script>
+      window.addEventListener("load", function () {
+        const canvas = document.getElementById("canvas1");
+        const ctx = canvas.getContext("2d");
+
+        const audio = document.getElementById("audio");
+
+        const container = document.querySelector(".container");
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+
+        console.log(canvas.width);
+        console.log(canvas.height);
+
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        const audioSource = audioContext.createMediaElementSource(audio);
+        const analyser = audioContext.createAnalyser();
+
+        analyser.fftSize = 512;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        audioSource.connect(analyser);
+        analyser.connect(audioContext.destination);
+
+        audio.addEventListener("play", () => {
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+        });
+
+        class Bar {
+          constructor(x, y, width, height, color, index) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            const hue = (index / bars.length) * 360;
+            this.color = `hsl(${hue}, 70%, 50%)`;
+            this.index = index;
+          }
+          update(musicNodes) {
+            const sound = musicNodes * 400;
+            if (sound > this.height) {
+              this.height = sound;
+            } else {
+              this.height -= this.height * 0.03;
+            }
+          }
+          draw(context) {
+            const gap = 30;
+            context.strokeStyle = this.color;
+            context.lineWidth = this.width;
+            context.save();
+
+            context.translate(this.index, 0);
+            context.fillStyle = "gray";
+
+            context.fillRect(this.x, this.y + 20, this.width, -this.height);
+
+            context.stroke();
+
+            context.restore();
+          }
+        }
+
+        let bars = [];
+        for (let i = 1; i < analyser.frequencyBinCount; i = i + 4) {
+          bars.push(new Bar(0, 0, 2, 10, "black", i));
+        }
+
+        let softVolume = 0;
+        function animate() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          analyser.getByteTimeDomainData(dataArray);
+
+          const normSamples = [...dataArray].map((e) => e / 128 - 1);
+          let sum = 0;
+          for (let i = 0; i < normSamples.length; i++) {
+            sum += normSamples[i] * normSamples[i];
+          }
+          const volume = Math.sqrt(sum / normSamples.length);
+
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          bars.forEach((bar, i) => {
+            bar.update(normSamples[i]);
+            bar.draw(ctx);
+          });
+          ctx.restore();
+
+          requestAnimationFrame(animate);
+        }
+
+        function startAudioContext() {
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+          audio.removeEventListener("play", startAudioContext);
+        }
+        audio.addEventListener("play", startAudioContext);
+
+        animate();
+      });
+    </script>
+  </body>
+</html>

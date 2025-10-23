@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      .container {
+        height: 500px;
+        width: 500px;
+        border: 1px solid black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        padding: 20px;
+        background-color: aqua;
+      }
+      canvas {
+        top: 0;
+        left: 0;
+        z-index: 1;
+      }
+      .cd {
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+      }
+      .albumCover {
+        width: 50%;
+        height: 50%;
+        border-radius: 50%;
+        transform: translate(50%, 50%);
+        background-color: black;
+      }
+      .albumCover img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: contain;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="cd" id="cd">
+        <div class="albumCover"></div>
+      </div>
+
+      <canvas id="canvas1"></canvas>
+    </div>
+    <audio id="audio" controls>
+      <!-- Using a sample audio URL for demo -->
+      <source src="interstellar.mp3" type="audio/wav" />
+      Your browser does not support the audio element.
+    </audio>
+
+    <script>
+      window.addEventListener("load", function () {
+        const canvas = document.getElementById("canvas1");
+        const ctx = canvas.getContext("2d");
+        const cd = document.getElementById("cd");
+        const audio = document.getElementById("audio");
+
+        const container = document.querySelector(".container");
+        canvas.width = container.clientWidth - 50;
+        canvas.height = container.clientHeight - 50;
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) * 0.3; // Radius of the circular arrangement
+
+        console.log(canvas.width);
+        console.log(canvas.height);
+
+        // Create AudioContext and connect to audio element
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        const audioSource = audioContext.createMediaElementSource(audio);
+        const analyser = audioContext.createAnalyser();
+
+        analyser.fftSize = 1024;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        audioSource.connect(analyser);
+        analyser.connect(audioContext.destination);
+
+        audio.addEventListener("play", () => {
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+        });
+
+        class Bar {
+          constructor(angle, radius, width, index) {
+            this.angle = angle;
+            this.radius = radius;
+            this.width = width;
+            this.height = 0;
+            this.index = index;
+            this.color = "white"; // Initial color
+            this.x = centerX + Math.cos(angle) * radius;
+            this.y = centerY + Math.sin(angle) * radius;
+          }
+
+          update(musicNodes, frequencyData) {
+            const sound = musicNodes * 150; // Reduced multiplier for better visual
+            if (sound > this.height) {
+              this.height = sound;
+            } else {
+              this.height *= 0.95;
+            }
+
+            // Update position
+            this.x = centerX + Math.cos(this.angle) * this.radius;
+            this.y = centerY + Math.sin(this.angle) * this.radius;
+
+            // Dynamic color based on frequency data
+            const hue = (this.index / bufferLength) * 360; // Map index to hue
+            const saturation = 100;
+            const lightness = 50 + (frequencyData / 255) * 25; // Lightness based on amplitude
+            this.color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+          }
+
+          draw(context) {
+            context.save();
+
+            // Move to the bar position
+            context.translate(this.x, this.y);
+
+            // Rotate so the bar points outward from the center
+            context.rotate(this.angle + Math.PI / 2);
+
+            // Draw the bar as a rectangle
+            context.fillStyle = this.color;
+            context.fillRect(
+              this.width / 2,
+              -this.height,
+              this.width,
+              this.height
+            );
+
+            context.restore();
+          }
+        }
+
+        let bars = [];
+        const numBars = bufferLength; // Limit number of bars for better visual
+        for (let i = 0; i < numBars; i++) {
+          const angle = (Math.PI * 2 * i) / numBars;
+          const width = ((Math.PI * 2 * radius) / numBars) * 0.9; // Width based on circumference
+          bars.push(new Bar(angle, radius, width, i));
+        }
+
+        let softVolume = 0;
+
+        function animate() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          analyser.getByteFrequencyData(dataArray); // Get frequency data
+
+          softVolume = 0;
+          for (let i = 0; i < bars.length; i++) {
+            // In the animate function, change the audioValue calculation to:
+            const audioValue =
+              i < bufferLength
+                ? dataArray[i]
+                : dataArray[bufferLength - (i - bufferLength) - 1];
+            // Map bars to frequency data
+            bars[i].update(audioValue / 255, audioValue); // Pass frequency data to update
+            bars[i].draw(ctx);
+            softVolume += audioValue;
+          }
+          softVolume /= dataArray.length * 255;
+
+          cd.style.transform = `translate(-50%, -50%) scale(${
+            1 + softVolume * 0.5
+          })`;
+
+          requestAnimationFrame(animate);
+        }
+
+        function startAudioContext() {
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+          audio.removeEventListener("play", startAudioContext);
+        }
+        audio.addEventListener("play", startAudioContext);
+
+        animate();
+      });
+    </script>
+  </body>
+</html>

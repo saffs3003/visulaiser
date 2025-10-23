@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      .container {
+        height: 500px;
+        width: 500px;
+        border: 1px solid black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        padding: 20px;
+
+        background-color: aqua;
+      }
+      canvas {
+        /* width: 100%;
+        height: 100%; */
+        /* position: absolute; */
+        top: 0;
+        left: 0;
+        z-index: 1;
+      }
+      .cd {
+        background-color: black;
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+      }
+      .albumCover {
+        width: 50%;
+        height: 50%;
+        border-radius: 50%;
+        transform: translate(50%, 50%);
+      }
+      .albumCover img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: contain;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="cd" id="cd">
+        <div class="albumCover">
+          <img src="penguin.jpeg" alt="penguin" />
+        </div>
+      </div>
+
+      <canvas id="canvas1"></canvas>
+    </div>
+    <audio id="audio" controls src="consoleSound.mp3"></audio>
+
+    <script>
+      window.addEventListener("load", function () {
+        const canvas = document.getElementById("canvas1");
+        const ctx = canvas.getContext("2d");
+        const cd = document.getElementById("cd");
+        const audio = document.getElementById("audio");
+
+        const container = document.querySelector(".container");
+        canvas.width = container.clientWidth - 50;
+        canvas.height = container.clientHeight - 50;
+
+        console.log(canvas.width);
+        console.log(canvas.height);
+        // Create AudioContext and connect to audio element
+        const audioContext = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        const audioSource = audioContext.createMediaElementSource(audio);
+        const analyser = audioContext.createAnalyser();
+
+        analyser.fftSize = 512;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        audioSource.connect(analyser);
+        analyser.connect(audioContext.destination);
+
+        audio.addEventListener("play", () => {
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+        });
+
+        class Bar {
+          constructor(x, y, width, height, color, index) {
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            const hue = (index / bars.length) * 360; // or use a fixed number like 256
+            this.color = `hsl(${hue}, 70%, 50%)`;
+            this.index = index;
+          }
+          update(musicNodes) {
+            const sound = musicNodes * 300;
+            if (sound > this.height) {
+              this.height = sound;
+            } else {
+              this.height -= this.height * 0.03;
+            }
+          }
+          draw(context) {
+            context.strokeStyle = this.color;
+            context.lineWidth = this.width;
+            context.save();
+            context.rotate(this.index * 0.05);
+            context.beginPath();
+            context.bezierCurveTo(
+              this.x / 2,
+              this.y / 2,
+              this.height * -0.5 - 180,
+              this.height + 100,
+              this.x,
+              this.y
+            );
+            context.stroke();
+
+            if (this.index > 120) {
+              context.beginPath();
+              context.arc(
+                this.x,
+                this.y + 20 + this.height / 2 + this.height * 0.1,
+                this.height * 0.05,
+                0,
+                Math.PI * 2
+              );
+              context.stroke();
+              context.beginPath();
+              context.moveTo(this.x, this.y + 5);
+
+              context.stroke();
+            }
+            context.restore();
+          }
+        }
+
+        let bars = [];
+        for (let i = 1; i < analyser.frequencyBinCount; i = i + 3) {
+          const radius = 100;
+          bars.push(new Bar(0, radius, 0.4, 4, "black", i));
+        }
+
+        let softVolume = 0;
+        // Normalize samples to range [-1,1]
+        const normSamples = [...dataArray].map((e) => e / 128 - 1);
+        function animate() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          analyser.getByteTimeDomainData(dataArray);
+
+          // Normalize samples to range [-1,1]
+          const normSamples = [...dataArray].map((e) => e / 128 - 1);
+
+          // Calculate volume (RMS)
+          let sum = 0;
+          for (let i = 0; i < normSamples.length; i++) {
+            sum += normSamples[i] * normSamples[i];
+          }
+          const volume = Math.sqrt(sum / normSamples.length);
+
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          bars.forEach((bar, i) => {
+            bar.update(normSamples[i]);
+            bar.draw(ctx);
+          });
+          ctx.restore();
+
+          softVolume = softVolume * 0.9 + volume * 0.1;
+          cd.style.transform = `translate(-50%, -50%) scale(${
+            1 + softVolume * 2
+          })`;
+
+          requestAnimationFrame(animate);
+        }
+
+        function startAudioContext() {
+          if (audioContext.state === "suspended") {
+            audioContext.resume();
+          }
+          audio.removeEventListener("play", startAudioContext);
+        }
+        audio.addEventListener("play", startAudioContext);
+
+        animate();
+      });
+    </script>
+  </body>
+</html>
